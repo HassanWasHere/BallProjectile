@@ -18,7 +18,8 @@ function Ball.new(Parent, Position, PickupRange)
 	newBall.SensorPart.Size = newBall.Part.Size * PickupRange
 	newBall.SensorPart.Anchored = false
 	newBall.SensorPart.CanCollide = false
-
+	newBall.SensorPart.Transparency = 1
+	
 	newBall.SensorWeld = Instance.new("Weld", newBall.SensorPart)
 	newBall.SensorWeld.Part0 = newBall.Part
 	newBall.SensorWeld.Part1 = newBall.SensorPart
