@@ -2,41 +2,39 @@ local Ball = {}
 local Event = Instance.new("RemoteEvent", game:GetService("ReplicatedStorage"))
 Event.Name = "BallEvent"
 
+local Balls = {}
 
-function Ball.new(Parent, Position, PickupRange)
+local Points = game:GetService("DataStoreService"):GetOrderedDataStore("Points")
+local CurrentPoints = {}
+
+function Ball.new(Parent, Position, PickupRange, TargetPart, TargetCallback)
 	local newBall = {}
 	setmetatable(newBall, {__index = Ball})
 	newBall.Part = Instance.new("Part", Parent)
 	newBall.Part.Shape = "Ball"
 	newBall.Part.Size = Vector3.new(2,2,2)
-	newBall.Part.Position = Position
 	newBall.CurrentHolder = nil
 	newBall.PickupRange = PickupRange or 1
-	
-	newBall.PickupWeld = Instance.new("Weld", newBall.Part)
 
+	newBall.TargetPart = TargetPart
+	
 	newBall.SensorPart = Instance.new("Part", newBall.Part)
 	newBall.SensorPart.Size = newBall.Part.Size * PickupRange
 	newBall.SensorPart.Anchored = false
 	newBall.SensorPart.CanCollide = false
 	newBall.SensorPart.Transparency = 1
-	
+	newBall.SensorPart.Position = Position
+
 	newBall.SensorWeld = Instance.new("Weld", newBall.SensorPart)
-	newBall.SensorWeld.Part0 = newBall.Part
-	newBall.SensorWeld.Part1 = newBall.SensorPart
+	newBall.SensorWeld.Part1 = newBall.Part
+	newBall.SensorWeld.Part0 = newBall.SensorPart
 
 	newBall.SensedPlayers = {}
-
+	table.insert(Balls, newBall)
 	return newBall
 end
 
 function Ball:init()
-	self.TouchEvent = self.Part.Touched:connect(function(HitPart) -- TODO: here for testing, replace with E to pickup
-		local Player = self:IsHitPlayer(HitPart)
-		if Player then
-			self:PickUp(Player)
-		end
-	end)
 	self.SensorEvent1 = self.SensorPart.Touched:connect(function(Hit)
 		wait()
 		local Player = self:IsHitPlayer(Hit, "HumanoidRootPart")
@@ -58,15 +56,7 @@ function Ball:init()
 			end
 		end
 	end)
-	self.RemoteEvent = Event.OnServerEvent:connect(function(Player, Event, Input)
-		if Player then
-			if Event == "Throw" then
-				self:Throw(Input)
-			elseif Event == "Pickup" then
-				self:PickUp(Player)
-			end
-		end
-	end)
+	
 end
 
 function Ball:IsHitPlayer(HitPart, ...)
@@ -91,10 +81,12 @@ function Ball:PickUp(Player)
 		local Character = Player.Character
 		local RightArm = Character:FindFirstChild("RightHand")
 		local Humanoid = Character:FindFirstChild("Humanoid")
+		if not RightArm or not Humanoid then return end
+		self.Part.Parent = Character
 		self.SensorPart.Massless = true
-		self.TouchEvent:disconnect()
 		self.SensorEvent1:disconnect()
 		self.SensorEvent2:disconnect()
+		self.PickupWeld = Instance.new("Weld", self.Part)
 		self.PickupWeld.Part0 = RightArm
 		self.PickupWeld.Part1 = self.Part
 		self.PickupWeld.C0 = CFrame.new(0,-1,0)
@@ -112,26 +104,78 @@ function Ball:Throw(MousePos)
 		local Humanoid = Character:FindFirstChild("Humanoid")
 		self.HoldAnimation:Stop()
 		self.ThrowAnimation = Humanoid:LoadAnimation(Character.Animate.point:GetChildren()[1])
+		self.ThrowAnimation.Looped = false
 		self.ThrowAnimation:Play()
-		Event:FireClient(Player, "Dropped")
 		
 		self.PickupWeld:Destroy()
 
 		local Origin = self.Part.Position
 
+		self.Part.Parent = Workspace
+		self.Part:SetNetworkOwner(nil) -- Have to give ownership to server to prevent rubberbanding..
+
 		local BodyVelocity = Instance.new("BodyVelocity", self.Part)
-		local velocity = CFrame.new(Origin, MousePos.p).lookVector * 50
+		local velocity = CFrame.new(Origin, MousePos.p).lookVector * 120
 		BodyVelocity.Velocity = velocity
 
-		self.Part.Touched:connect(function(Hit)
+
+		self.BVEvent = self.Part.Touched:connect(function(Hit)
 			if Hit ~= self.SensorPart and Hit.Parent ~= Character then
-				BodyVelocity:Destroy()
+				if BodyVelocity then
+					BodyVelocity:Destroy()
+				end
+				self.BVEvent:disconnect()
+				if Hit == self.TargetPart then
+					self:Award()
+				end
 			end
 		end)
+		spawn(function()
+			wait(.75)
+			if BodyVelocity then
+				BodyVelocity:Destroy()
+			end
+			self.BVEvent:disconnect()
+			self:init()
+		end)
+
 	end
 end
 
+function Ball:Award()
+	local Player = self.CurrentHolder
+	if CurrentPoints[Player.userId] then
+		CurrentPoints[Player.userId] = CurrentPoints[Player.userId] + 1
+		_G.Update(CurrentPoints) -- NEVER USE, ONLY HERE FOR SHOWCASING. REMOVE!
+	end
+end
 
+Event.OnServerEvent:connect(function(Player, Ball, Event, Input)
+	if not Ball or not Player then return end
+	if not Player.Character then return end
+	for i,v in pairs(Balls) do
+		if v.Part == Ball then
+			Ball = v
+		end
+	end
+	if Event == "Throw" then
+		if Ball.Part.Parent ~= Player.Character then return end
+		Ball:Throw(Input)
+	elseif Event == "RequestPickup" then
+		if Ball.SensedPlayers[Player.userId] then
+			Ball:PickUp(Player)
+		end
+	end
+end)
+
+game.Players.PlayerAdded:connect(function(Player)
+	Player:WaitForDataReady()
+	CurrentPoints[Player.userId] = Points:GetAsync(Player.userId) or 0
+end)
+
+game.Players.PlayerRemoving:connect(function(Player)
+	Points:SetAsync(Player.userId, CurrentPoints[Player.userId])
+end)
 return Ball
 
 
