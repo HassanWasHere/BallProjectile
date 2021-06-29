@@ -8,9 +8,11 @@ PickUp.AlwaysOnTop = true
 PickUp.Size = UDim2.new(2,0,2,0)
 PickUp.Enabled = false
 local ImageLabel = Instance.new("ImageLabel", PickUp)
-ImageLabel.Size = UDim2.new(1,0,1,0)
+ImageLabel.Size = UDim2.new(0,0,0,0)
 ImageLabel.BackgroundTransparency = 1
 ImageLabel.Image = "rbxassetid://7017736579"
+ImageLabel.AnchorPoint = Vector2.new(0.5,0.5)
+ImageLabel.Position = UDim2.new(0.5,0,0.5,0)
 
 Event.OnClientEvent:connect(function(Event, Ball, PickupRange)
 	local Character = LocalPlayer.Character
@@ -21,19 +23,22 @@ Event.OnClientEvent:connect(function(Event, Ball, PickupRange)
 		if CurrentBallPickedUp or CurrentBallRegistered then return end
 		CurrentBallRegistered = Ball
 		PickUp.Adornee = Ball
-		PickUp.Enabled = true					
+		PickUp.Enabled = true
+		ImageLabel:TweenSize(UDim2.new(1,0,1,0), Enum.EasingDirection.Out, Enum.EasingStyle.Sine, .5, true)					
 	elseif Event == "EndRegister" then
 		if CurrentBallPickedUp then return end
-		PickUp.Enabled = false
-		PickUp.Adornee = nil
-		CurrentBallRegistered = nil
+		ImageLabel:TweenSize(UDim2.new(0,0,0,0), Enum.EasingDirection.In, Enum.EasingStyle.Sine, .5, true, 
+			function(status) 
+				if status == Enum.TweenStatus.Completed then 
+					CurrentBallRegistered = nil
+					PickUp.Enabled = false
+				end 
+			end)			
 	elseif Event == "PickedUp" then
 		CurrentBallPickedUp = Ball
 		PickUp.Enabled = false
-		PickUp.Adornee = nil
 	end
 end)
-
 Input.InputBegan:connect(function(inp, gp)
 	if inp.UserInputType == Enum.UserInputType.MouseButton1 then
 		if CurrentBallPickedUp then
