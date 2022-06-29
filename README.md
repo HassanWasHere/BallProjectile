@@ -1,6 +1,6 @@
-# UP
+# Ball projectile
 
-A simple OOP approach to a throwable ball using Rojo.
+A simple OOP approach to a throwable ball using Rojo. Created with projectile motion and Bezier curves
 
 ```bash
 rojo build -o "UP.rbxlx"
