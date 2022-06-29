@@ -7,6 +7,9 @@ local Balls = {}
 local Points = game:GetService("DataStoreService"):GetOrderedDataStore("Points")
 local CurrentPoints = {}
 
+
+-- PROJECTILE NOT USING PROXIMITY PROMPT
+
 function Ball.new(Parent, Position, PickupRange, TargetPart, TargetCallback)
 	local newBall = {}
 	setmetatable(newBall, {__index = Ball})
@@ -96,6 +99,16 @@ function Ball:PickUp(Player)
 		self.CurrentHolder = Player
 	end
 end
+function lerp(a, b, c)
+	return a + (b - a) * c
+end
+
+function quadBezier(t, p0, p1, p2)
+	local l1 = lerp(p0, p1, t)
+	local l2 = lerp(p1, p2, t)
+	local quad = lerp(l1, l2, t)
+	return quad
+end
 
 function Ball:Throw(MousePos)
 	if self.CurrentHolder then
@@ -109,21 +122,28 @@ function Ball:Throw(MousePos)
 		
 		self.PickupWeld:Destroy()
 
-		local Origin = self.Part.Position
 
 		self.Part.Parent = Workspace
-		self.Part:SetNetworkOwner(nil) -- Have to give ownership to server to prevent rubberbanding..
+		self.Part.Anchored = true
+		
+		local TargetPos = MousePos.p
+		local Distance = (TargetPos - self.Part.Position).magnitude
+		
+		local p0 = self.Part.Position
+		local p1 = (TargetPos + self.Part.Position)/2 + Vector3.new(0, 10, 0) -- We have start and end point, we need to calculate 1 point in between
+		local p2 = TargetPos
+		
 
-		local BodyVelocity = Instance.new("BodyVelocity", self.Part)
-		local velocity = CFrame.new(Origin, MousePos.p).lookVector * 120
-		BodyVelocity.Velocity = velocity
-
+		
+		for i = 5, Distance, 5 do
+			local t = i/Distance
+			local CurrentCoordinate = quadBezier(t, p0, p1, p2)
+			self.Part.CFrame = self.Part.CFrame:Lerp(CFrame.new(CurrentCoordinate, p2), t)
+			game:GetService("RunService").Heartbeat:wait()
+		end
 
 		self.BVEvent = self.Part.Touched:connect(function(Hit)
 			if Hit ~= self.SensorPart and Hit.Parent ~= Character then
-				if BodyVelocity then
-					BodyVelocity:Destroy()
-				end
 				self.BVEvent:disconnect()
 				if Hit == self.TargetPart then
 					self:Award()
@@ -131,10 +151,7 @@ function Ball:Throw(MousePos)
 			end
 		end)
 		spawn(function()
-			wait(.75)
-			if BodyVelocity then
-				BodyVelocity:Destroy()
-			end
+			wait(1)
 			self.BVEvent:disconnect()
 			self:init()
 		end)
